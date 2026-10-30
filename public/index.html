@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API de Gestión de Tareas</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 20px;
+      background-color: #f4f6f8;
+      color: #333;
+    }
+    .contenedor {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #e0e0e0;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .estado-socket {
+      font-size: 14px;
+      color: #2e7d32;
+      font-weight: bold;
+    }
+    .btn-swagger {
+      padding: 8px 14px;
+      border-radius: 6px;
+      background: #49cc90;
+      color: white;
+      font-weight: bold;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .tarjeta {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .campo { margin-bottom: 12px; }
+    label { display: block; font-size: 13px; margin-bottom: 4px; font-weight: 600; }
+    input, textarea, select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    button.btn-principal {
+      width: 100%;
+      padding: 10px;
+      background: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .tarea-item {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 14px;
+      margin-bottom: 10px;
+      background: #fafafa;
+    }
+    .tarea-cabecera {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .tarea-titulo { font-weight: bold; font-size: 15px; }
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: bold;
+    }
+    .badge-PENDIENTE { background: #fff3e0; color: #e65100; }
+    .badge-EN_PROGRESO { background: #e3f2fd; color: #1565c0; }
+    .badge-COMPLETADA { background: #e8f5e9; color: #2e7d32; }
+    .tarea-desc { font-size: 13px; color: #555; margin-bottom: 8px; }
+    .tarea-acciones {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #eee;
+    }
+    .btn-peligro {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .log-eventos {
+      margin-top: 20px;
+      background: #263238;
+      color: #eceff1;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
+    <header>
+      <div>
+        <h2>📋 CRUD de Tareas</h2>
+        <span class="estado-socket" id="socket-estado">Conectando WebSockets...</span>
+      </div>
+      <div>
+        <a href="/api-docs" target="_blank" class="btn-swagger">📖 Abrir Swagger UI</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="tarjeta">
+        <h3>Nueva Tarea</h3>
+        <form id="formulario-tarea" onsubmit="guardarTarea(event)">
+          <div class="campo">
+            <label>Título *</label>
+            <input type="text" id="titulo" required placeholder="Ej: Realizar deber">
+          </div>
+          <div class="campo">
+            <label>Descripción</label>
+            <textarea id="descripcion" rows="3" placeholder="Detalle..."></textarea>
+          </div>
+          <div class="campo">
+            <label>Prioridad</label>
+            <select id="prioridad">
+              <option value="BAJA">Baja</option>
+              <option value="MEDIA" selected>Media</option>
+              <option value="ALTA">Alta</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Fecha Límite</label>
+            <input type="date" id="fechaLimite">
+          </div>
+          <button type="submit" class="btn-principal">Crear Tarea</button>
+        </form>
+      </div>
+
+      <div class="tarjeta">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h3>Lista de Tareas</h3>
+          <select id="filtro-estado" onchange="cargarTareas()" style="width: auto;">
+            <option value="">Todos</option>
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="EN_PROGRESO">En Progreso</option>
+            <option value="COMPLETADA">Completadas</option>
+          </select>
+        </div>
+        <div id="lista-tareas">Cargando...</div>
+      </div>
+    </div>
+
+    <div class="log-eventos" id="eventos">
+      > Conectando a eventos en tiempo real...
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const socketEstado = document.getElementById('socket-estado');
+    const eventosBox = document.getElementById('eventos');
+
+    socket.on('connect', () => {
+      socketEstado.textContent = '● WebSockets Conectado';
+      agregarLog('Conectado a WebSockets');
+    });
+
+    socket.on('tarea_creada', (tarea) => {
+      agregarLog(`[EVENTO] Creada: #${tarea.id} "${tarea.titulo}"`);
+      cargarTareas();
+    });
+
+    socket.on('tarea_actualizada', (tarea) => {
+      agregarLog(`[EVENTO] Actualizada: #${tarea.id} (${tarea.estado})`);
+      cargarTareas();
+    });
+
+    socket.on('tarea_eliminada', (datos) => {
+      agregarLog(`[EVENTO] Eliminada: #${datos.id}`);
+      cargarTareas();
+    });
+
+    function agregarLog(mensaje) {
+      const hora = new Date().toLocaleTimeString();
+      eventosBox.innerHTML = `> [${hora}] ${mensaje}<br>` + eventosBox.innerHTML;
+    }
+
+    async function cargarTareas() {
+      const filtro = document.getElementById('filtro-estado').value;
+      const url = filtro ? `/api/tareas?estado=${filtro}` : '/api/tareas';
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        renderizar(data.datos || []);
+      } catch (err) {
+        document.getElementById('lista-tareas').innerHTML = 'Error al cargar';
+      }
+    }
+
+    function renderizar(tareas) {
+      const contenedor = document.getElementById('lista-tareas');
+      if (tareas.length === 0) {
+        contenedor.innerHTML = '<p style="color: #888;">No hay tareas registradas.</p>';
+        return;
+      }
+
+      contenedor.innerHTML = tareas.map(t => `
+        <div class="tarea-item">
+          <div class="tarea-cabecera">
+            <span class="tarea-titulo">#${t.id} ${t.titulo}</span>
+            <div>
+              <span class="badge badge-${t.estado}">${t.estado}</span>
+              <span class="badge" style="background: #eee;">${t.prioridad}</span>
+            </div>
+          </div>
+          ${t.descripcion ? `<div class="tarea-desc">${t.descripcion}</div>` : ''}
+
+          <div class="tarea-acciones">
+            <select onchange="cambiarEstado(${t.id}, this.value, ${t.version})" style="width: auto; font-size: 12px;">
+              <option value="PENDIENTE" ${t.estado === 'PENDIENTE' ? 'selected' : ''}>Pendiente</option>
+              <option value="EN_PROGRESO" ${t.estado === 'EN_PROGRESO' ? 'selected' : ''}>En Progreso</option>
+              <option value="COMPLETADA" ${t.estado === 'COMPLETADA' ? 'selected' : ''}>Completada</option>
+            </select>
+            <button class="btn-peligro" onclick="eliminarTarea(${t.id})">Eliminar</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function guardarTarea(e) {
+      e.preventDefault();
+      const payload = {
+        titulo: document.getElementById('titulo').value,
+        descripcion: document.getElementById('descripcion').value,
+        prioridad: document.getElementById('prioridad').value,
+        fechaLimite: document.getElementById('fechaLimite').value || undefined
+      };
+
+      const res = await fetch('/api/tareas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.mensaje || 'Error al guardar');
+      } else {
+        document.getElementById('formulario-tarea').reset();
+      }
+    }
+
+    async function cambiarEstado(id, nuevoEstado, version) {
+      const res = await fetch(`/api/tareas/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: nuevoEstado, version })
+      });
+      const data = await res.json();
+      if (!res.ok) alert(data.mensaje || 'Error al actualizar');
+    }
+
+    async function eliminarTarea(id) {
+      if (!confirm(`¿Eliminar tarea #${id}?`)) return;
+      const res = await fetch(`/api/tareas/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) alert(data.mensaje || 'Error al eliminar');
+    }
+
+    cargarTareas();
+  </script>
+</body>
+</html>
